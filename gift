@@ -1,0 +1,157 @@
+## Полный рабочий гайд: сбор подарков Telegram через Telethon (с комментариями, проверено)
+
+### 1. Создай папку проекта и перейди в неё
+
+```bash
+mkdir gift-bot
+cd gift-bot
+```
+
+---
+
+### 2. Создай виртуальное окружение внутри папки проекта
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+- После активации в начале строки появится `(venv)`.  
+- Все зависимости будут установлены только для этого проекта.
+
+---
+
+### 3. Установи зависимости
+
+```bash
+pip install telethon python-dotenv
+```
+- [Telethon — официальная документация][1]
+- [Skillbox: пример работы с Telethon][5]
+
+---
+
+### 4. Получи API ID и API Hash
+
+1. Перейди на [my.telegram.org](https://my.telegram.org).
+2. Войди в аккаунт Telegram.
+3. Перейди в раздел **API development tools**.
+4. Создай приложение (название и URL любые, платформа Desktop).
+5. Сохрани **API ID** и **API Hash**.
+
+---
+
+### 5. Создай файл `.env` с данными
+
+```env
+API_ID=твой_api_id
+API_HASH=твой_api_hash
+SESSION_NAME=gift_session
+```
+- `SESSION_NAME` — любое имя, например, gift_session.
+
+---
+
+### 6. Создай файл `bot.py` с подробными комментариями
+
+```python
+import os
+import json
+import time
+from dotenv import load_dotenv
+from telethon import TelegramClient, functions
+
+# Загрузка переменных окружения из .env
+load_dotenv()
+API_ID = int(os.getenv('API_ID'))
+API_HASH = os.getenv('API_HASH')
+SESSION_NAME = os.getenv('SESSION_NAME', 'gift_session')
+
+async def main():
+    start = time.perf_counter()
+    # Создаём клиент Telegram с сохранением сессии
+    async with TelegramClient(SESSION_NAME, API_ID, API_HASH) as client:
+        # Первый запуск: потребуется ввести код из Telegram
+        result = await client(functions.payments.GetStarGiftsRequest(hash=0))
+        # Собираем все ID подарков
+        gift_ids = [gift.id for gift in result.gifts]
+        count = len(gift_ids)
+        elapsed = time.perf_counter() - start
+
+        # Сохраняем результат в gifts.json
+        with open('gifts.json', 'w', encoding='utf-8') as f:
+            json.dump({
+                "gift_ids": gift_ids,
+                "gift_count": count,
+                "exec_time_sec": round(elapsed, 2),
+                "last_update": int(time.time())
+            }, f, ensure_ascii=False, indent=2)
+
+        print(f"Обработано подарков: {count}")
+        print(f"Время выполнения: {elapsed:.2f} сек.")
+
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
+```
+
+**Комментарии к коду:**
+- Все данные (ключи, имя сессии) берутся из `.env` — удобно и безопасно.
+- При первом запуске потребуется ввести номер телефона и код из Telegram.
+- После первого запуска появится файл сессии (`gift_session.session`), который не надо удалять.
+- Повторная авторизация не потребуется, пока файл сессии не удалён.
+
+---
+
+### 7. Первый запуск
+
+```bash
+python bot.py
+```
+- Введи номер телефона Telegram (без +).
+- Введи код, который придёт в Telegram.
+- Если включена двухфакторка — введи пароль.
+
+---
+
+### 8. Повторные запуски
+
+- Просто запускай `python bot.py` — повторной авторизации не потребуется, пока файл сессии не удалён.
+
+---
+
+### 9. Проверка результата
+
+- В папке появится файл `gifts.json` с результатами.
+- В папке будет файл сессии (`gift_session.session`) — не удаляй его!
+
+---
+
+### 10. Пример содержимого gifts.json
+
+```json
+{
+  "gift_ids": [123, 456, 789],
+  "gift_count": 3,
+  "exec_time_sec": 0.45,
+  "last_update": 1717875600
+}
+1
+---
+
+### 11. Кратко по ошибкам
+
+- Если видишь ошибку `externally-managed-environment` — ты не в виртуальном окружении.  
+  **Решение:** всегда используй виртуальное окружение для pip!
+- Если не создаётся файл сессии — проверь права на запись в папку.
+- Если не приходит код — проверь правильность номера и отсутствие VPN.
+
+---
+
+### 12. Итог
+
+- Всё делается в одной папке.
+- venv создаётся внутри проекта.
+- pip работает только внутри активированного venv.
+- Сессия сохраняется — повторная авторизация не нужна.
+- Файл сессии и `.env` не публикуй!
+
