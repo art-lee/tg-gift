@@ -11,10 +11,11 @@ cd gift-bot
 
 ### 2. Создай виртуальное окружение внутри папки проекта
 
-```bash
+apt update
+apt install python3-venv
 python3 -m venv venv
 source venv/bin/activate
-```
+
 - После активации в начале строки появится `(venv)`.  
 - Все зависимости будут установлены только для этого проекта.
 
