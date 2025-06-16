@@ -46,53 +46,80 @@ pip install telethon python-dotenv
 API_ID=твой_api_id
 API_HASH=твой_api_hash
 SESSION_NAME=gift_session
-```
+DEFAULT_GIFT_COUNT=121
+POLL_INTERVAL=10
+BOT_TOKEN=
+CHAT_ID=
 - `SESSION_NAME` — любое имя, например, gift_session.
 
 ---
 
 ### 6. Создай файл `bot.py` с подробными комментариями
-
-```python
 import os
 import json
 import time
-from dotenv import load_dotenv
+import asyncio
+from dotenv import load_dotenv, dotenv_values
 from telethon import TelegramClient, functions
 
-# Загрузка переменных окружения из .env
+# Загрузка переменных окружения
 load_dotenv()
 API_ID = int(os.getenv('API_ID'))
 API_HASH = os.getenv('API_HASH')
 SESSION_NAME = os.getenv('SESSION_NAME', 'gift_session')
+POLL_INTERVAL = int(os.getenv('POLL_INTERVAL', 10))
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+CHAT_ID = int(os.getenv('CHAT_ID'))
+GIFTS_FILE = 'gifts.json'
 
-async def main():
-    start = time.perf_counter()
-    # Создаём клиент Telegram с сохранением сессии
+def get_default_gift_count():
+    env = dotenv_values('.env')
+    return int(env.get('DEFAULT_GIFT_COUNT', 121))
+
+async def send_alert(message):
+    try:
+        print(f"==> send_alert: пробую отправить уведомление в чат {CHAT_ID} через бота")
+        async with TelegramClient('bot_alert', API_ID, API_HASH) as bot_client:
+            await bot_client.start(bot_token=BOT_TOKEN)
+            await bot_client.send_message(entity=CHAT_ID, message=message)
+        print("==> send_alert: уведомление отправлено успешно")
+    except Exception as e:
+        print(f"Ошибка отправки: {str(e)}")
+
+async def check_gifts(client):
+    result = await client(functions.payments.GetStarGiftsRequest(hash=0))
+    return [gift.id for gift in result.gifts], len(result.gifts)
+
+async def monitor_gifts():
     async with TelegramClient(SESSION_NAME, API_ID, API_HASH) as client:
-        # Первый запуск: потребуется ввести код из Telegram
-        result = await client(functions.payments.GetStarGiftsRequest(hash=0))
-        # Собираем все ID подарков
-        gift_ids = [gift.id for gift in result.gifts]
-        count = len(gift_ids)
-        elapsed = time.perf_counter() - start
+        while True:
+            try:
+                gift_ids, count = await check_gifts(client)
+                with open(GIFTS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        "gift_ids": gift_ids,
+                        "gift_count": count,
+                        "last_update": int(time.time())
+                    }, f, indent=2)
+                print(f"Текущее количество: {count}")
 
-        # Сохраняем результат в gifts.json
-        with open('gifts.json', 'w', encoding='utf-8') as f:
-            json.dump({
-                "gift_ids": gift_ids,
-                "gift_count": count,
-                "exec_time_sec": round(elapsed, 2),
-                "last_update": int(time.time())
-            }, f, ensure_ascii=False, indent=2)
+                DEFAULT_GIFT_COUNT = get_default_gift_count()
+                print(f"Текущий порог из .env: {DEFAULT_GIFT_COUNT}")
+                if count > DEFAULT_GIFT_COUNT:
+                    print(f"!!! Попытка отправить уведомление: {count} > {DEFAULT_GIFT_COUNT}")
+                    await send_alert(f"🚨 Обнаружено {count} подарков (порог: {DEFAULT_GIFT_COUNT})")
+                else:
+                    print(f"Условие не выполнено: {count} <= {DEFAULT_GIFT_COUNT}")
 
-        print(f"Обработано подарков: {count}")
-        print(f"Время выполнения: {elapsed:.2f} сек.")
+                await asyncio.sleep(POLL_INTERVAL)
+            except Exception as e:
+                print(f"Ошибка мониторинга: {str(e)}")
+                await asyncio.sleep(30)
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
-```
+    asyncio.run(monitor_gifts())
+
+
 
 **Комментарии к коду:**
 - Все данные (ключи, имя сессии) берутся из `.env` — удобно и безопасно.
@@ -107,51 +134,14 @@ if __name__ == '__main__':
 ```bash
 python bot.py
 ```
-- Введи номер телефона Telegram (без +).
+- Введи токен
 - Введи код, который придёт в Telegram.
 - Если включена двухфакторка — введи пароль.
 
 ---
-
-### 8. Повторные запуски
-
-- Просто запускай `python bot.py` — повторной авторизации не потребуется, пока файл сессии не удалён.
-
----
-
 ### 9. Проверка результата
 
 - В папке появится файл `gifts.json` с результатами.
-- В папке будет файл сессии (`gift_session.session`) — не удаляй его!
+- В папке будет файл сессии (`gift_session.session`)
 
 ---
-
-### 10. Пример содержимого gifts.json
-
-```json
-{
-  "gift_ids": [123, 456, 789],
-  "gift_count": 3,
-  "exec_time_sec": 0.45,
-  "last_update": 1717875600
-}
-1
----
-
-### 11. Кратко по ошибкам
-
-- Если видишь ошибку `externally-managed-environment` — ты не в виртуальном окружении.  
-  **Решение:** всегда используй виртуальное окружение для pip!
-- Если не создаётся файл сессии — проверь права на запись в папку.
-- Если не приходит код — проверь правильность номера и отсутствие VPN.
-
----
-
-### 12. Итог
-
-- Всё делается в одной папке.
-- venv создаётся внутри проекта.
-- pip работает только внутри активированного venv.
-- Сессия сохраняется — повторная авторизация не нужна.
-- Файл сессии и `.env` не публикуй!
-
