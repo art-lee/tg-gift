@@ -146,3 +146,111 @@ python bot.py
 - В папке будет файл сессии (`gift_session.session`)
 
 ---
+
+
+
+Вот подробный гайд, как сделать автозапуск Telegram-бота через systemd, чтобы он автоматически стартовал после перезагрузки сервера и перезапускался при ошибках. Всё делается **без screen** и других ручных инструментов — только стандартные средства Linux.
+
+---
+
+## 1. Проверь, где лежит твой бот
+
+- Пусть бот находится, например, в `/root/gift-bot/bot.py`
+- Виртуальное окружение (если используешь) — `/root/gift-bot/venv`
+
+---
+
+## 2. Создай systemd unit-файл для бота
+
+Открой редактор (например, nano):
+
+```bash
+sudo nano /etc/systemd/system/giftbot.service
+```
+
+Вставь такой шаблон (замени пути на свои!):
+
+```ini
+[Unit]
+Description=Telegram Gift Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/gift-bot
+ExecStart=/root/gift-bot/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/giftbot.log
+StandardError=append:/var/log/giftbot.log
+
+[Install]
+WantedBy=multi-user.target
+```
+- **User=root** — если бот лежит в /root, иначе укажи своего пользователя.
+- **WorkingDirectory** — папка, где лежит бот и venv.
+- **ExecStart** — путь до python из venv и скрипта.
+- **Restart=always** — перезапускать всегда, даже после сбоя или ошибки[3][4][5][6][1].
+- **StandardOutput/StandardError** — логи будут сохраняться в `/var/log/giftbot.log`.
+
+---
+
+## 3. Активируй и запусти сервис
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable giftbot
+sudo systemctl start giftbot
+```
+
+---
+
+## 4. Проверяй статус и логи
+
+- Проверить статус:
+  ```bash
+  systemctl status giftbot
+  ```
+  Должно быть `active (running)`.
+
+- Смотреть логи:
+  ```bash
+  tail -f /var/log/giftbot.log
+  ```
+  или
+  ```bash
+  journalctl -u giftbot -n 50
+  ```
+
+---
+
+## 5. Если нужно внести изменения
+
+- После изменения unit-файла:
+  ```bash
+  sudo systemctl daemon-reload
+  sudo systemctl restart giftbot
+  ```
+
+---
+  После загрузки проверь статус:
+  systemctl status giftbot
+
+
+---
+
+## 7. Если что-то не работает
+
+- Проверь лог-файл `/var/log/giftbot.log` — там будут все ошибки скрипта.
+- Проверь права на папки и файлы.
+- Убедись, что путь к python и bot.py указан правильно.
+- Если меняешь что-то в unit-файле — всегда делай `systemctl daemon-reload`.
+
+---
+
+## 8. Альтернативные параметры перезапуска
+
+- `Restart=always` — перезапускать всегда (рекомендуется для ботов).
+- `Restart=on-failure` — перезапускать только при ошибке.
+- `RestartSec=5` — ждать 5 секунд перед перезапуском[4].
